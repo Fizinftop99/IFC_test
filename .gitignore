@@ -1,0 +1,9 @@
+### Example user template
+
+# IntelliJ project files
+.idea
+*.iml
+/nikm_schema/
+/notebooks/
+/net_hierarchy/
+/trash/
