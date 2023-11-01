@@ -1,7 +1,7 @@
-import pandas as pd
-import pickle
 import math
-from neo4j import GraphDatabase, Transaction
+
+import pandas as pd
+from neo4j import GraphDatabase, Transaction, RoutingControl
 
 GROUPS_URI = "neo4j://localhost:7688"
 # GROUPS_URI = "neo4j://localhost:7690"
@@ -165,3 +165,12 @@ class NxToNeo4jExplorer:
                         lambda row: get_edge_elements(stor_id, row.type1, row.type2),
                         axis=1
                     )
+
+    def get_dict(self):
+        query = """MATCH (el)-[:TRAVERSE]->(relEl) RETURN el.ADCM_Title as wbs1, el.ADCM_Level as wbs2, el.ADCM_DIN as 
+        wbs3_id, el.ADCM_JobType as wbs3, el.name as name UNION MATCH (el)-[:TRAVERSE]->(relEl) RETURN 
+        relEl.ADCM_Title as wbs1, relEl.ADCM_Level as wbs2, relEl.ADCM_DIN as wbs3_id, relEl.ADCM_JobType as wbs3, 
+        relEl.name as name"""
+
+        records = self.element_driver.session().run(query).data()
+        return records

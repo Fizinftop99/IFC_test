@@ -1,3 +1,4 @@
+import json
 import pickle
 
 from ifc_to_nx_explorer import IfcToNxExplorer
@@ -13,3 +14,6 @@ if __name__ == "__main__":
     neo4j_exp = NxToNeo4jExplorer()
     G = nx_exp.get_net_graph()
     neo4j_exp.create_neo4j(G)
+
+    with open("data.json", "w", encoding="UTF-8") as file_out:
+        json.dump(neo4j_exp.get_dict()[0:2], file_out, ensure_ascii=False, indent=2)
