@@ -1,22 +1,22 @@
 import math
 
 import pandas as pd
-from neo4j import GraphDatabase, Transaction, RoutingControl
+from neo4j import GraphDatabase, Transaction
 
-GROUPS_URI = "neo4j://localhost:7688"
-# GROUPS_URI = "neo4j://localhost:7690"
 ELEMENTS_URI = "neo4j://localhost:7687"
+GROUPS_URI = "neo4j://localhost:7688"
 USER = "neo4j"
 PSWD = "23109900"
 
 
-class NxToNeo4jExplorer:
+class NxToNeo4jConverter:
     def __init__(self):
         self.element_driver = GraphDatabase.driver(ELEMENTS_URI, auth=(USER, PSWD))
         self.element_driver.verify_connectivity()
 
         self.group_driver = GraphDatabase.driver(GROUPS_URI, auth=(USER, PSWD))
         self.group_driver.verify_connectivity()
+        self.create_groups_graph()
         q_rel = '''MATCH (a:IfcClass)-[r:FOLLOWS]->(b:IfcClass)
         RETURN a.name AS type1, b.name AS type2'''
         self.group_link_df = pd.DataFrame(self.group_driver.session().run(q_rel).data())
@@ -25,6 +25,37 @@ class NxToNeo4jExplorer:
     def close(self):
         self.element_driver.close()
 
+    def create_groups_graph(self):
+        classes = (
+            'IfcWall',
+            # 'IfcDoor',
+            'IfcBuildingElementProxy',
+            # 'IfcWindow',
+            'IfcSlab',
+            "IfcFlowTerminal",
+            "IfcFurniture",
+            'IfcCurtainWall',)
+
+        # Create group data
+        def add_class(tx: Transaction, class_name: str):
+            q_class = '''
+            MERGE (n:IfcClass {name: $name})
+            '''
+            tx.run(q_class, name=class_name)
+
+        with self.group_driver.session() as session:
+            session.run('MATCH (n) DETACH DELETE n')
+            for i in classes:
+                session.execute_write(add_class, i)
+
+            session.execute_write(NxToNeo4jConverter.add_class_rel, 'IfcBuildingElementProxy', 'IfcWall')
+            session.execute_write(NxToNeo4jConverter.add_class_rel, 'IfcBuildingElementProxy', 'IfcSlab')
+            session.execute_write(NxToNeo4jConverter.add_class_rel, 'IfcWall', 'IfcWindow')
+            session.execute_write(NxToNeo4jConverter.add_class_rel, 'IfcWall', "IfcFlowTerminal")
+            session.execute_write(NxToNeo4jConverter.add_class_rel, 'IfcWall', 'IfcCurtainWall')
+            session.execute_write(NxToNeo4jConverter.add_class_rel, 'IfcWall', "IfcFurniture")
+            session.execute_write(NxToNeo4jConverter.add_class_rel, 'IfcBuildingElementProxy', 'IfcDoor')
+            session.execute_write(NxToNeo4jConverter.add_class_rel, 'IfcDoor', 'IfcWindow')
     @staticmethod
     def add_node(tx: Transaction, id_, stor_id_, props_):
         q = """
@@ -88,7 +119,7 @@ class NxToNeo4jExplorer:
             session.run('MATCH (n) DETACH DELETE n')
 
             build_id = [node for node, data in G.nodes(data=True) if data.get('is_a') == 'IfcBuilding'][0]
-            session.execute_write(NxToNeo4jExplorer.add_node, build_id, None, G.nodes[build_id])
+            session.execute_write(NxToNeo4jConverter.add_node, build_id, None, G.nodes[build_id])
 
             # Loop over all storeys in building
             for stor_id in G.successors(build_id):
@@ -96,8 +127,8 @@ class NxToNeo4jExplorer:
                 if data.get('is_a') != 'IfcBuildingStorey':
                     continue
                 # Create storey in graph and link it with building
-                session.execute_write(NxToNeo4jExplorer.add_node, stor_id, None, data)
-                session.execute_write(NxToNeo4jExplorer.add_edge, build_id, stor_id)
+                session.execute_write(NxToNeo4jConverter.add_node, stor_id, None, data)
+                session.execute_write(NxToNeo4jConverter.add_edge, build_id, stor_id)
 
                 # find all groups (IFC classes) in this storey
                 contained_classes = set(G.nodes[i]['is_a'] for i in list(filter(
@@ -108,7 +139,7 @@ class NxToNeo4jExplorer:
                 cls_to_id = dict()
                 for j, cls_name in enumerate(contained_classes):
                     cls_to_id[cls_name] = str(stor_id) + '_' + str(j)
-                    session.execute_write(NxToNeo4jExplorer.add_ifc_class, stor_id, cls_to_id[cls_name], cls_name)
+                    session.execute_write(NxToNeo4jConverter.add_ifc_class, stor_id, cls_to_id[cls_name], cls_name)
 
                 def insert_elements(group):
                     elements = list(filter(
@@ -129,13 +160,11 @@ class NxToNeo4jExplorer:
                     for j, i in enumerate(sorted(elements, key=compute_angle)):
                         s_data = G.nodes[i]
                         if s_data["coordinates"]:
-                            session.execute_write(NxToNeo4jExplorer.add_node, i, stor_id, s_data)
-                            session.execute_write(NxToNeo4jExplorer.add_el_to_class, cls_to_id[group], i)
+                            session.execute_write(NxToNeo4jConverter.add_node, i, stor_id, s_data)
+                            session.execute_write(NxToNeo4jConverter.add_el_to_class, cls_to_id[group], i)
                             if j > 0:
-                                session.execute_write(NxToNeo4jExplorer.traverse, prev_id, i)
+                                session.execute_write(NxToNeo4jConverter.traverse, prev_id, i)
                             prev_id = i
-                            if j == 4:
-                                break
 
                 def get_edge_elements(stor_id, type1: str, type2: str):
                     with self.element_driver.session() as session:

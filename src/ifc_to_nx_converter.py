@@ -3,7 +3,7 @@ import networkx as nx
 from ifcopenshell import entity_instance
 
 
-class IfcToNxExplorer:
+class IfcToNxConverter:
     """
     Класс для создания networkx графа из ifc файла
     """
@@ -31,20 +31,20 @@ class IfcToNxExplorer:
             for rel in element.ContainsElements:
                 relatedElements = rel.RelatedElements
                 for child in relatedElements:
-                    yield from IfcToNxExplorer._traverse(child, parent, filter_fn)
+                    yield from IfcToNxConverter._traverse(child, parent, filter_fn)
 
         # follow Aggregation Relation
         if element.is_a('IfcObjectDefinition'):
             for rel in element.IsDecomposedBy:
                 relatedObjects = rel.RelatedObjects
                 for child in relatedObjects:
-                    yield from IfcToNxExplorer._traverse(child, parent, filter_fn)
+                    yield from IfcToNxConverter._traverse(child, parent, filter_fn)
 
     @staticmethod
     def _dict_merge(dct, merge_dct) -> None:
         for k, v in merge_dct.items():
             if k in dct and isinstance(dct[k], dict) and isinstance(merge_dct[k], dict):  # noqa
-                IfcToNxExplorer._dict_merge(dct[k], merge_dct[k])
+                IfcToNxConverter._dict_merge(dct[k], merge_dct[k])
             elif not dct.get(k):
                 dct[k] = merge_dct[k]
 
@@ -100,8 +100,8 @@ class IfcToNxExplorer:
             return element.id()
 
         for project in ifc_file.by_type("IfcProject"):
-            for parent, child in IfcToNxExplorer._traverse(project, None, IfcToNxExplorer._filter_ifc):
-                attributes = IfcToNxExplorer.node_attributes(child)
+            for parent, child in IfcToNxConverter._traverse(project, None, IfcToNxConverter._filter_ifc):
+                attributes = IfcToNxConverter.node_attributes(child)
                 n = node(child)
                 # if self.G.has_node(n):
                 #     attrs = self.G.nodes[n]
