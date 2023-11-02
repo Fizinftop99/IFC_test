@@ -174,3 +174,20 @@ class NxToNeo4jExplorer:
 
         records = self.element_driver.session().run(query).data()
         return records
+
+    def save_edges(self):
+        query = """
+        MATCH (el)-[:TRAVERSE]->(relEl) 
+        RETURN el.ADCM_Title as pred_wbs1, el.ADCM_Level as pred_wbs2, el.ADCM_DIN as pred_din, el.id as pred_id, 
+        relEl.ADCM_Title as flw_wbs1, relEl.ADCM_Level as flw_wbs2, relEl.ADCM_DIN as flw_din, relEl.id as flw_id
+        """
+        link_df = pd.DataFrame(self.element_driver.session().run(query).data())
+        link_df.apply(
+            lambda row: Link(
+                source=row.pred_wbs1 + row.pred_wbs2 + row.pred_din + row.pred_id,
+                target=row.flw_wbs1 + row.flw_wbs2 + row.flw_din + row.flw_id,
+                type="FS",  # или "0"
+                lag=0,
+            ).save(),
+            axis=1
+        )
