@@ -1,12 +1,17 @@
 import json
+import os
 import pickle
 
 from ifc_to_nx_converter import IfcToNxConverter
 from nx_to_neo4j_converter import NxToNeo4jConverter
+from create_group_graph import create_group_graph
 
 if __name__ == "__main__":
+    create_group_graph()
+
     nx_exp = IfcToNxConverter()
-    nx_exp.create_net_graph("../Amundsena_IFC_24/АР_Амундсена_Син_R22.ifc")
+    path = "C:\\Users\\naumo\\PycharmProjects\\IFC_test\\Amundsena_IFC_24"
+    nx_exp.create_net_graph(path)
 
     # pickle.dump(nx_exp.get_net_graph(), open('new_AR.pickle', 'wb'))
     # G = pickle.load(open('exp_AR.pickle', 'rb'))

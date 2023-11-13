@@ -1,3 +1,5 @@
+import os
+
 import ifcopenshell
 import networkx as nx
 from ifcopenshell import entity_instance
@@ -85,12 +87,11 @@ class IfcToNxConverter:
         atts["coordinates"] = get_coordinates(elem)
         return atts
 
-    def create_net_graph(self, ifc_path: str):
+    def create_net_graph(self, path: str):
         """
         Создает граф в поле self.G
-        :param ifc_path: путь до ifc файла
+        :param path: путь до директории с IFC файлами
         """
-        ifc_file = ifcopenshell.open(ifc_path)
 
         def node(element):
             """
@@ -99,17 +100,21 @@ class IfcToNxConverter:
             """
             return element.id()
 
-        for project in ifc_file.by_type("IfcProject"):
-            for parent, child in IfcToNxConverter._traverse(project, None, IfcToNxConverter._filter_ifc):
-                attributes = IfcToNxConverter.node_attributes(child)
-                n = node(child)
-                # if self.G.has_node(n):
-                #     attrs = self.G.nodes[n]
-                #     IfcToNxExplorer.dict_merge(attrs, attributes)
-                # else:
-                self.G.add_node(n, **attributes)
-                if parent is not None and not self.G.has_edge(node(parent), n):
-                    self.G.add_edge(node(parent), n)
+        file_list = list(map(lambda file: os.path.join(path, file), os.listdir(path)))
+        for ifc_path in file_list:
+            print(ifc_path)
+            ifc_file = ifcopenshell.open(ifc_path)
+            for project in ifc_file.by_type("IfcProject"):
+                for parent, child in IfcToNxConverter._traverse(project, None, IfcToNxConverter._filter_ifc):
+                    attributes = IfcToNxConverter.node_attributes(child)
+                    n = node(child)
+                    if self.G.has_node(n):
+                        attrs = self.G.nodes[n]
+                        IfcToNxConverter._dict_merge(attrs, attributes)
+                    else:
+                        self.G.add_node(n, **attributes)
+                    if parent is not None and not self.G.has_edge(node(parent), n):
+                        self.G.add_edge(node(parent), n)
 
     def get_net_graph(self):
         """
