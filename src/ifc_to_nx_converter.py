@@ -71,18 +71,16 @@ class IfcToNxConverter:
         atts.setdefault("ADCM_JobType", None)
         atts.setdefault("ADCM_Part", None)
 
-        # atts.setdefault(
-        #     "Elevation",
-        #     element.Elevation if element.is_a("IfcBuildingStorey") else None,
-        # )
+        atts.setdefault(
+            "Elevation",
+            elem.Elevation if elem.is_a("IfcBuildingStorey") else None,
+        )
 
         def get_coordinates(el):
             if not hasattr(el, "ObjectPlacement"):
-                return None
-            # if not el.ObjectPlacement.RelativePlacement.Axis:
-            #     return None
-            coords = el.ObjectPlacement.RelativePlacement.Location.Coordinates
-            return None if coords == (0.0, 0.0, 0.0) else coords
+                return 0.0, 0.0, 0.0
+            return el.ObjectPlacement.RelativePlacement.Location.Coordinates
+            # return None if coords == (0.0, 0.0, 0.0) else coords
 
         atts["coordinates"] = get_coordinates(elem)
         return atts

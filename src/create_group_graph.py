@@ -29,6 +29,7 @@ def create_group_graph():
         # 'IfcDoor',
         'IfcBuildingElementProxy',
         # 'IfcWindow',
+        "IfcStair",
         'IfcSlab',
         "IfcFlowTerminal",
         "IfcFurniture",
@@ -37,6 +38,8 @@ def create_group_graph():
     with group_driver.session() as session:
         session.run('MATCH (n) DETACH DELETE n')
         for i in classes:
+            if i == "IfcStair":
+                print(i)
             session.execute_write(add_class, i)
 
         session.execute_write(add_class_rel, 'IfcBuildingElementProxy', 'IfcWall')
@@ -45,5 +48,10 @@ def create_group_graph():
         session.execute_write(add_class_rel, 'IfcWall', "IfcFlowTerminal")
         session.execute_write(add_class_rel, 'IfcWall', 'IfcCurtainWall')
         session.execute_write(add_class_rel, 'IfcWall', "IfcFurniture")
+        session.execute_write(add_class_rel, 'IfcWall', "IfcStair")
         session.execute_write(add_class_rel, 'IfcBuildingElementProxy', 'IfcDoor')
         session.execute_write(add_class_rel, 'IfcDoor', 'IfcWindow')
+
+
+if __name__ == "__main__":
+    create_group_graph()
