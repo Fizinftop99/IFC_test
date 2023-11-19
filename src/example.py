@@ -1,10 +1,8 @@
-import json
-import os
-import pickle
+import pandas as pd
 
+from create_group_graph import create_group_graph
 from ifc_to_nx_converter import IfcToNxConverter
 from nx_to_neo4j_converter import NxToNeo4jConverter
-from create_group_graph import create_group_graph
 
 if __name__ == "__main__":
     create_group_graph()
@@ -17,5 +15,11 @@ if __name__ == "__main__":
 
     neo4j_exp = NxToNeo4jConverter()
     neo4j_exp.create_neo4j(G)
-    neo4j_exp.get_result()
+
+    node_df = pd.DataFrame(neo4j_exp.get_nodes())
+    edge_df = pd.DataFrame(neo4j_exp.get_edges())
+    with pd.ExcelWriter('../result/new.xlsx', engine='openpyxl') as writer:
+        node_df.to_excel(writer, sheet_name="Работы")
+        edge_df.to_excel(writer, sheet_name="Связи")
+
     neo4j_exp.close()

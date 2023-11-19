@@ -38,8 +38,6 @@ def create_group_graph():
     with group_driver.session() as session:
         session.run('MATCH (n) DETACH DELETE n')
         for i in classes:
-            if i == "IfcStair":
-                print(i)
             session.execute_write(add_class, i)
 
         session.execute_write(add_class_rel, 'IfcBuildingElementProxy', 'IfcWall')
