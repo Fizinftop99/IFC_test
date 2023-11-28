@@ -26,27 +26,38 @@ def create_group_graph():
 
     classes = (
         'IfcWall',
+        'IfcBeam',
         # 'IfcDoor',
         'IfcBuildingElementProxy',
         # 'IfcWindow',
         "IfcStair",
+        "IfcStairFlight",
         'IfcSlab',
         "IfcFlowTerminal",
         "IfcFurniture",
-        'IfcCurtainWall',)
+        'IfcCurtainWall',
+        "IfcFooting",
+        "IfcColumn",
+    )
 
     with group_driver.session() as session:
         session.run('MATCH (n) DETACH DELETE n')
         for i in classes:
             session.execute_write(add_class, i)
 
+        session.execute_write(add_class_rel, 'IfcFooting', 'IfcWall')
+        session.execute_write(add_class_rel, 'IfcFooting', 'IfcColumn')
+        session.execute_write(add_class_rel, 'IfcFooting', 'IfcBuildingElementProxy')
         session.execute_write(add_class_rel, 'IfcBuildingElementProxy', 'IfcWall')
         session.execute_write(add_class_rel, 'IfcBuildingElementProxy', 'IfcSlab')
+        session.execute_write(add_class_rel, 'IfcBuildingElementProxy', 'IfcBeam')
+        session.execute_write(add_class_rel, 'IfcBuildingElementProxy', 'IfcColumn')
         session.execute_write(add_class_rel, 'IfcWall', 'IfcWindow')
         session.execute_write(add_class_rel, 'IfcWall', "IfcFlowTerminal")
         session.execute_write(add_class_rel, 'IfcWall', 'IfcCurtainWall')
         session.execute_write(add_class_rel, 'IfcWall', "IfcFurniture")
         session.execute_write(add_class_rel, 'IfcWall', "IfcStair")
+        session.execute_write(add_class_rel, "IfcStair", "IfcStairFlight")
         session.execute_write(add_class_rel, 'IfcBuildingElementProxy', 'IfcDoor')
         session.execute_write(add_class_rel, 'IfcDoor', 'IfcWindow')
 

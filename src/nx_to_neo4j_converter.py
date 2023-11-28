@@ -24,13 +24,27 @@ class NxToNeo4jConverter:
         self.group_link_df = pd.DataFrame(self.group_driver.session().run(q_rel).data())
         self.group_driver.close()
 
+        df = pd.read_excel(
+            "./02-01-01 _Конструктивные решения_ .xls",
+            index_col=0,
+            header=None,
+            names=["GESN", "name"]
+        ).dropna()
+        df.index = df.index.str[1:]
+        self.gesn_to_name = df.name.to_dict()
+
     def close(self):
         self.element_driver.close()
 
-    @staticmethod
-    def add_node(tx: Transaction, id_, stor_id_, props_: dict):
+    # @staticmethod
+    def add_node(self, tx: Transaction, id_, stor_id_, props_: dict):
         if "ADCM_DIN" in props_.keys():
             props_["DIN"] = props_.pop("ADCM_DIN")
+        if "ADCM_GESN" in props_.keys():
+            gesn = props_.pop("ADCM_GESN")
+            props_["DIN"] = gesn
+            props_["work_name"] = self.gesn_to_name.get(gesn)
+
         q = """
         CREATE (n:Element)
         SET n = $props
@@ -77,8 +91,8 @@ class NxToNeo4jConverter:
     @staticmethod
     def link_classes(tx: Transaction, id1: str, id2: str):
         q_link_classes = '''
-        MATCH (a:IfcClass {id: $id1})
-        MATCH (b:IfcClass {id: $id2})
+        MATCH (a {id: $id1})
+        MATCH (b {id: $id2})
         MERGE (a)-[r:FOLLOWS]->(b)
         '''
         tx.run(q_link_classes, id1=id1, id2=id2)
@@ -92,7 +106,7 @@ class NxToNeo4jConverter:
             session.run('MATCH (n) DETACH DELETE n')
 
             build_id = [node for node, data in G.nodes(data=True) if data.get('is_a') == 'IfcBuilding'][0]
-            session.execute_write(NxToNeo4jConverter.add_node, build_id, None, G.nodes[build_id])
+            session.execute_write(self.add_node, build_id, None, G.nodes[build_id])
 
             # Loop over all storeys in building
             for stor_id in G.successors(build_id):
@@ -100,7 +114,7 @@ class NxToNeo4jConverter:
                 if data.get('is_a') != 'IfcBuildingStorey':
                     continue
                 # Create storey in graph and link it with building
-                session.execute_write(NxToNeo4jConverter.add_node, stor_id, None, data)
+                session.execute_write(self.add_node, stor_id, None, data)
                 session.execute_write(NxToNeo4jConverter.add_edge, build_id, stor_id)
 
                 # # find all groups (IFC classes) in this storey
@@ -117,15 +131,14 @@ class NxToNeo4jConverter:
                     session.execute_write(NxToNeo4jConverter.add_ifc_class, stor_id, cls_to_id[cls_name], cls_name)
 
                 # connect ifc classes (groups)
-                with self.element_driver.session() as session2:
-                    self.group_link_df.apply(
-                        lambda row: session2.execute_write(
-                            NxToNeo4jConverter.link_classes,
-                            cls_to_id.get(row.type1),
-                            cls_to_id.get(row.type2)
-                        ),
-                        axis=1,
-                    )
+                self.group_link_df.apply(
+                    lambda row: session.execute_write(
+                        NxToNeo4jConverter.link_classes,
+                        cls_to_id.get(row.type1),
+                        cls_to_id.get(row.type2)
+                    ),
+                    axis=1,
+                )
 
                 def insert_elements(group):
                     elements = list(filter(
@@ -148,7 +161,7 @@ class NxToNeo4jConverter:
                     for j, i in enumerate(sorted(elements, key=compute_angle)):
                         s_data = G.nodes[i]
                         if s_data["coordinates"]:
-                            session.execute_write(NxToNeo4jConverter.add_node, i, stor_id, s_data)
+                            session.execute_write(self.add_node, i, stor_id, s_data)
                             session.execute_write(NxToNeo4jConverter.add_el_to_class, cls_to_id[group], i)
                             if j > 0:
                                 session.execute_write(NxToNeo4jConverter.traverse, prev_id, i)
@@ -188,7 +201,7 @@ class NxToNeo4jConverter:
             q_storeys = '''
             MATCH (n) WHERE n.is_a = 'IfcBuildingStorey'
             RETURN n.id AS id, n.Elevation As elevation'''
-            level_df = pd.DataFrame(self.element_driver.session().run(q_storeys).data())
+            level_df = pd.DataFrame(session.run(q_storeys).data())
             level_df.sort_values(by=['elevation'], inplace=True, ignore_index=True)
 
             def connect_storeys(stor1, stor2):
@@ -210,12 +223,23 @@ class NxToNeo4jConverter:
                             '''
                         session.run(q_rel)
 
-            with self.element_driver.session() as session:
-                for ind, row in level_df.iterrows():
-                    if ind != 0:
-                        session.execute_write(NxToNeo4jConverter.link_classes, pred_id, row.id)
-                        connect_storeys(pred_id, row.id)
-                    pred_id = row.id
+            for ind, row in level_df.iterrows():
+                if ind != 0:
+                    session.execute_write(NxToNeo4jConverter.link_classes, pred_id, row.id)
+                    connect_storeys(pred_id, row.id)
+                pred_id = row.id
+
+            # deleting loops from neo4j graph
+            q_del_2x_loop = """
+                            match (x)-[r1]->(y)-[r2]->(x)
+                            delete r2
+                            """
+            q_del_1x_loop = """
+                            match (x)-[r]->(x)
+                            delete r
+                            """
+            session.run(q_del_1x_loop)
+            session.run(q_del_2x_loop)
 
     def get_nodes(self):
         query = """MATCH (el)-[:TRAVERSE]->(relEl) RETURN el.id as id, el.ADCM_Title as wbs1, el.ADCM_Level as wbs2, 

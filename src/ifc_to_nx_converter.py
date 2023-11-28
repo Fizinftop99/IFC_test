@@ -66,7 +66,8 @@ class IfcToNxConverter:
 
         atts.setdefault("ADCM_Title", None)
         atts.setdefault("ADCM_Level", None)
-        atts.setdefault("ADCM_DIN", None)
+        # atts.setdefault("ADCM_DIN", None)
+        # atts.setdefault("ADCM_GESN", None)
         atts.setdefault("ADCM_RD", None)
         atts.setdefault("ADCM_JobType", None)
         atts.setdefault("ADCM_Part", None)
