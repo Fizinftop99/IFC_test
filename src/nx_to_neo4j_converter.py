@@ -3,7 +3,7 @@ import math
 import pandas as pd
 from neo4j import GraphDatabase, Transaction
 
-from data_collection import calculateDistance, allNodes, calculate_hist_distance
+from a_new.data_collection import calculate_hist_distance
 
 ELEMENTS_URI = "neo4j://localhost:7687"
 GROUPS_URI = "neo4j://localhost:7688"
@@ -18,7 +18,6 @@ class NxToNeo4jConverter:
 
         self.group_driver = GraphDatabase.driver(GROUPS_URI, auth=(USER, PSWD))
         self.group_driver.verify_connectivity()
-        # self.create_groups_graph()
         q_rel = '''MATCH (a:IfcClass)-[r:FOLLOWS]->(b:IfcClass)
         RETURN a.name AS type1, b.name AS type2'''
         self.group_link_df = pd.DataFrame(self.group_driver.session().run(q_rel).data())
@@ -125,10 +124,15 @@ class NxToNeo4jConverter:
                 contained_classes = set(G.nodes[i]['is_a'] for i in G.successors(stor_id))
 
                 # add groups (classes) to the graph
-                cls_to_id = dict()
+                cls_to_id = dict()  # unique dict on each storey (wbs1)
                 for j, cls_name in enumerate(contained_classes):
                     cls_to_id[cls_name] = str(stor_id) + '_' + str(j)
-                    session.execute_write(NxToNeo4jConverter.add_ifc_class, stor_id, cls_to_id[cls_name], cls_name)
+                    session.execute_write(
+                        NxToNeo4jConverter.add_ifc_class,
+                        stor_id,
+                        cls_to_id[cls_name],
+                        cls_name,
+                    )
 
                 # connect ifc classes (groups)
                 self.group_link_df.apply(
@@ -143,8 +147,8 @@ class NxToNeo4jConverter:
                 def insert_elements(group):
                     elements = list(filter(
                         lambda el_id: G.nodes[el_id]["is_a"] == group,  # and G.nodes[el_id]["coordinates"],
-                        G.successors(stor_id))
-                    )
+                        G.successors(stor_id)
+                    ))
 
                     # Для упорядочивания элементов одной группы
                     start_point = (0, 0)
@@ -170,24 +174,23 @@ class NxToNeo4jConverter:
                                 break
 
                 def get_edge_elements(stor_id, type1: str, type2: str):
-                    with self.element_driver.session() as session:
-                        q_get_last = f'''MATCH (s:Element {{is_a: '{type1}', stor_id: '{str(stor_id)}' }})
-                        WHERE NOT (s)-[]->(:Element {{is_a: '{type1}' }})
-                        RETURN s.id AS id
-                        LIMIT 1'''
-                        last_res = session.run(q_get_last).data()
-                        q_get_first = f'''MATCH (s:Element {{is_a: '{type2}', stor_id: '{str(stor_id)}' }})
-                        WHERE NOT (:Element {{is_a: '{type2}' }})-[]->(s)
-                        RETURN s.id AS id
-                        LIMIT 1'''
-                        first_res = session.run(q_get_first).data()
+                    q_get_last = f'''MATCH (s:Element {{is_a: '{type1}', stor_id: '{str(stor_id)}' }})
+                    WHERE NOT (s)-[]->(:Element {{is_a: '{type1}' }})
+                    RETURN s.id AS id
+                    LIMIT 1'''
+                    last_res = session.run(q_get_last).data()
+                    q_get_first = f'''MATCH (s:Element {{is_a: '{type2}', stor_id: '{str(stor_id)}' }})
+                    WHERE NOT (:Element {{is_a: '{type2}' }})-[]->(s)
+                    RETURN s.id AS id
+                    LIMIT 1'''
+                    first_res = session.run(q_get_first).data()
 
-                        if len(last_res) > 0 and len(first_res) > 0:
-                            q_rel = f'''MATCH (a:Element) WHERE a.id = '{last_res[0]['id']}'
-                                MATCH (b:Element) WHERE b.id = '{first_res[0]['id']}'
-                                MERGE (a)-[r:TRAVERSE]->(b)
-                                '''
-                            session.run(q_rel)
+                    if len(last_res) > 0 and len(first_res) > 0:
+                        q_rel = f'''MATCH (a:Element) WHERE a.id = '{last_res[0]['id']}'
+                            MATCH (b:Element) WHERE b.id = '{first_res[0]['id']}'
+                            MERGE (a)-[r:TRAVERSE]->(b)
+                            '''
+                        session.run(q_rel)
 
                 for cls in contained_classes:
                     # fill the group with elements
