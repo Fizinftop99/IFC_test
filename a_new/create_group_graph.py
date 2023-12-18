@@ -1,6 +1,9 @@
 import pandas as pd
 from neo4j import GraphDatabase, Transaction
 
+
+EXCEL_GESN_PATH = "./solution.xls"
+GROUPS_URI = "neo4j://localhost:7688"
 classes = (
     'IfcWall',
     'IfcBeam',
@@ -36,19 +39,23 @@ def add_rel(tx, pred_name: str, flw_name: str):
 
 def create_group_graph():
     group_driver = GraphDatabase.driver(
-        "bolt://localhost:7688",
+        GROUPS_URI,
         auth=("neo4j", "23109900")
     )
     group_driver.verify_connectivity()
 
     df = pd.read_excel(
-        "./solution.xls",
-        # index_col=0,
+        EXCEL_GESN_PATH,
+        sheet_name=0,
         header=None,
         names=["GESN", "name"]
     ).dropna()
-    df.GESN = df.GESN.str[1:]
     gesn_list = df.GESN.to_numpy()
+
+    df_gesn_links = pd.read_excel(
+        EXCEL_GESN_PATH,
+        sheet_name=1,
+    ).dropna()
 
     with group_driver.session() as session:
         session.run('MATCH (n) DETACH DELETE n')
@@ -60,14 +67,18 @@ def create_group_graph():
             pred_gesn = gesn
         session.execute_write(add_class, "no GESN", "WBS3")
         session.execute_write(add_rel, gesn_list[-1], "no GESN")
+        session.execute_write(add_rel, gesn_list[-2], "no GESN")
+        df_gesn_links.apply(
+            lambda row: session.execute_write(add_rel, row.pred, row.flw),
+            axis=1
+        )
 
         for i in classes:
             session.execute_write(add_class, i, "IfcClass")
 
         session.execute_write(add_rel, 'IfcFooting', 'IfcWall')
-        session.execute_write(add_rel, 'IfcFooting', 'IfcStair')
         session.execute_write(add_rel, 'IfcSlab', 'IfcColumn')
-        session.execute_write(add_rel, 'IfcFooting', 'IfcBuildingElementProxy')
+        session.execute_write(add_rel, 'IfcFooting', 'IfcSlab')
         session.execute_write(add_rel, 'IfcBuildingElementProxy', 'IfcWall')
         session.execute_write(add_rel, 'IfcBuildingElementProxy', 'IfcStair')
         session.execute_write(add_rel, 'IfcSlab', 'IfcWall')
@@ -79,7 +90,7 @@ def create_group_graph():
         session.execute_write(add_rel, 'IfcWall', 'IfcCurtainWall')
         session.execute_write(add_rel, 'IfcWall', "IfcFurniture")
         session.execute_write(add_rel, 'IfcWall', "IfcStair")
-        session.execute_write(add_rel, "IfcColumn", 'IfcWall')
+        session.execute_write(add_rel, "IfcColumn", 'IfcBeam')
         session.execute_write(add_rel, "IfcStair", "IfcStairFlight")
         session.execute_write(add_rel, 'IfcBuildingElementProxy', 'IfcDoor')
         session.execute_write(add_rel, 'IfcDoor', 'IfcWindow')
