@@ -9,8 +9,8 @@ from data_collection import calculate_hist_distance
 # Number of elements in storey for visualisation
 LIMIT = 5
 
-ELEMENTS_URI = "neo4j://localhost:7687"
-GROUPS_URI = "neo4j://localhost:7688"
+ELEMENTS_URI = "neo4j://localhost:7686"
+GROUPS_URI = "neo4j://localhost:7685"
 # ELEMENTS_URI = "neo4j://neo4j_elements:7687"
 # GROUPS_URI = "neo4j://neo4j_groups:7687"
 USER = "neo4j"
@@ -167,7 +167,7 @@ class IfcToNeo4jConverter:
         group_driver.close()
 
         df = pd.read_excel(
-            "./solution.xls",
+            "./new_loader/solution.xls",
             index_col=0,
             header=None,
             names=["GESN", "name"]
@@ -192,8 +192,6 @@ class IfcToNeo4jConverter:
             building = first_model.by_type("IfcBuilding")[0]
             session.execute_write(add_node, str(building.id()), node_attributes(building))
 
-            # storey_to_marks = dict()
-
             for file_num, ifc_path in enumerate(file_list):
                 def node(element):
                     return str(file_num) + '-' + str(element.id())
@@ -202,8 +200,7 @@ class IfcToNeo4jConverter:
                 storeys = model.by_type(WBS1)
                 for stor in storeys:
                     atts = node_attributes(stor)
-                    storey_name = atts.get("name")  # + ' ' + str(round(atts.get("Elevation"), 1))
-
+                    storey_name = atts.get("name") + " (" + str(round(atts.get("Elevation"), 1)) + ")"
                     session.execute_write(add_node, node(stor), atts)
                     session.execute_write(add_edge, str(building.id()), node(stor))
 
@@ -249,8 +246,7 @@ class IfcToNeo4jConverter:
                             for i in range(len(target_elems[:LIMIT])):
                                 atts = node_attributes(target_elems[i])
                                 # marks.add(atts.get("ADCM_Level"))
-                                atts.update({"storey_name": storey_name})
-
+                                atts.update({"storey_name": storey_name})  # , "storey_elevation": storey_elevation})
                                 session.execute_write(add_node, node(target_elems[i]), atts)
                                 session.execute_write(add_el_to_wbs, wbs3_to_id[wbs3], node(target_elems[i]))
                                 if i != 0:
@@ -333,29 +329,29 @@ class IfcToNeo4jConverter:
 
     def get_nodes(self):
         q_storey_wbs2 = """MATCH 
-        (el)-[:TRAVERSE]->(fl) RETURN el.id as id, el.ADCM_Title as wbs1,
+        (el)-[:TRAVERSE|TRAVERSE_GROUP]->(fl) RETURN el.id as id, el.ADCM_Title as wbs1,
         el.storey_name as wbs2, el.ADCM_RD as wbs3, el.ADCM_GESN as wbs4_id, el.name as name 
-        UNION 
-        MATCH (el)-[:TRAVERSE]->(fl) RETURN fl.id as id, fl.ADCM_Title as wbs1,
+        UNION MATCH 
+        (el)-[:TRAVERSE|TRAVERSE_GROUP]->(fl) RETURN fl.id as id, fl.ADCM_Title as wbs1,
         fl.storey_name as wbs2, fl.ADCM_RD as wbs3, fl.ADCM_GESN as wbs4_id, fl.name as name
         """
         with self.element_driver.session() as session:
-            nodes = session.run(q_storey_wbs2).data()  # or
-            # distances = calculateDistance(session, allNodes(session))
-            hist_distances = calculate_hist_distance(session)  # , allNodes(session))
+            nodes = session.run(q_storey_wbs2).data()
+            hist_distances = calculate_hist_distance(session)
         for i in nodes:
             i.update({
-                "wbs4": self.gesn_to_name.get(i.get("wbs4_id")),
-                # "distance": distances.get(i.get("id")),
+                "wbs4": f'({i.get("ifc_type")}) {self.gesn_to_name.get(i.get("wbs4_id"))}',
+                "wbs4_id": f'{i.get("ifc_type")}-{i.get("wbs4_id")}',
                 "distance": hist_distances.get(i.get("id")),
             })
+        nodes.sort(key=lambda el: el["distance"])
         return nodes
 
     def get_edges(self):
         query = """
-                MATCH (el)-[:TRAVERSE]->(flw) 
-                RETURN el.id as source, flw.id as target
-                """
+        MATCH (el)-[:TRAVERSE|TRAVERSE_GROUP]->(flw) 
+        RETURN el.id as source, flw.id as target
+        """
         edges = self.element_driver.session().run(query).data()
         for edge in edges:
             edge.update({"type": "0", "lag": 0})

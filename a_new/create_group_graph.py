@@ -2,8 +2,8 @@ import pandas as pd
 from neo4j import GraphDatabase, Transaction
 
 
-EXCEL_GESN_PATH = "./solution.xls"
-GROUPS_URI = "neo4j://localhost:7688"
+EXCEL_GESN_PATH = "./new_loader/solution.xls"
+GROUPS_URI = "neo4j://localhost:7685"
 classes = (
     'IfcWall',
     'IfcBeam',

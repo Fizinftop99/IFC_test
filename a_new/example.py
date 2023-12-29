@@ -1,5 +1,3 @@
-import os
-
 import pandas as pd
 
 from create_group_graph import create_group_graph
